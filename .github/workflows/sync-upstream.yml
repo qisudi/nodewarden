@@ -105,19 +105,23 @@ jobs:
         run: |
           TARGET_SHA="${{ steps.resolve.outputs.target_sha }}"
           MODE="${{ steps.resolve.outputs.mode }}"
+          PRE_SYNC_SHA=$(git rev-parse HEAD)
+          echo "PRE_SYNC_SHA=$PRE_SYNC_SHA" >> $GITHUB_ENV
           git checkout main
           if [ "$MODE" = "manual" ]; then
             # Hard reset allows both upgrade and rollback
             git reset --hard "$TARGET_SHA"
           else
-            git merge "$TARGET_SHA" --no-edit
+            # Squash merge avoids pushing upstream workflow-file commits that
+            # GitHub Actions token cannot update in this fork.
+            git merge "$TARGET_SHA" --squash
           fi
 
       - name: Restore local workflow files
         if: steps.check.outputs.needs_update == 'true'
         run: |
           # Keep this fork's workflows local; upstream code changes still sync normally
-          git restore --source=HEAD@{1} --staged --worktree -- .github/workflows
+          git restore --source="$PRE_SYNC_SHA" --staged --worktree -- .github/workflows
           if ! git diff --cached --quiet; then
             git commit -m "chore: restore local workflows after upstream sync"
           fi
